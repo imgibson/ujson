@@ -11,11 +11,117 @@
 
 #include <cassert>
 #include <charconv>
+#include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <type_traits>
+#include <vector>
 
 namespace ujson {
+
+static std::optional<std::string> toString(std::string_view stringView) noexcept {
+  std::vector<char> result(stringView.length());
+  const char* cur = stringView.data();
+  const char* end = &cur[stringView.length()];
+  while (cur < end) {
+    if (*cur != '\\') {
+      if ((*cur & 0x80) == 0) {
+        result.push_back(*cur++);
+      } else if ((*cur & 0xE0) == 0xC0) {
+        result.insert(result.end(), {*cur++, *cur++});
+      } else if ((*cur & 0xF0) == 0xE0) {
+        result.insert(result.end(), {*cur++, *cur++, *cur++});
+      } else if ((*cur & 0xF8) == 0xF0) {
+        result.insert(result.end(), {*cur++, *cur++, *cur++, *cur++});
+      } else {
+        return std::nullopt;
+      }
+    } else {
+      if (++cur >= end) return std::nullopt;
+      switch (*cur++) {
+        case '"':
+          result.push_back('"');
+          break;
+        case '\\':
+          result.push_back('\\');
+          break;
+        case '/':
+          result.push_back('/');
+          break;
+        case 'b':
+          result.push_back('\b');
+          break;
+        case 'f':
+          result.push_back('\f');
+          break;
+        case 'n':
+          result.push_back('\n');
+          break;
+        case 'r':
+          result.push_back('\r');
+          break;
+        case 't':
+          result.push_back('\t');
+          break;
+        case 'u': {
+            auto toCodePoint = [](const char* beg, const char* end) noexcept -> std::uint16_t {
+              assert(end - beg == 4);
+              std::uint16_t result = 0;
+              for (const char* cur = beg; cur < end; ++cur) {
+                result <<= 4;
+                if (*cur >= '0' && *cur <= '9') {
+                  result |= (*cur - '0');
+                } else if (*cur >= 'a' && *cur <= 'f') {
+                  result |= (*cur - 'a' + 10);
+                } else if (*cur >= 'A' && *cur <= 'F') {
+                  result |= (*cur - 'A' + 10);
+                } else {
+                  return 0xFFFD;
+                }
+              }
+              return result;
+            };
+            if (cur + 4 > end) return std::nullopt;
+            std::uint32_t value = toCodePoint(&cur[0], &cur[4]);
+            if (value >= 0xD800 && value <= 0xDBFF) {
+              if (cur + 10 > end || cur[4] != '\\' || cur[5] != 'u') return std::nullopt;
+              std::uint16_t lowSurrogate = toCodePoint(&cur[6], &cur[10]);
+              if (lowSurrogate < 0xDC00 || lowSurrogate > 0xDFFF) return std::nullopt;
+              value = 0x10000 + ((value & 0x3FF) << 10) + (lowSurrogate & 0x3FF);
+              cur += 10;
+            } else {
+              cur += 4;
+            }
+            if (value <= 0x7F) {
+              result.push_back(static_cast<char>(value));
+            } else if (value <= 0x7FF) {
+              result.insert(result.end(),
+                            {static_cast<char>(0xC0 | (0x1F & (value >> 6))),
+                             static_cast<char>(0x80 | (0x3F & value))});
+            } else if (value <= 0xFFFF) {
+              result.insert(result.end(),
+                            {static_cast<char>(0xE0 | (0x0F & (value >> 12))),
+                             static_cast<char>(0x80 | (0x3F & (value >> 6))),
+                             static_cast<char>(0x80 | (0x3F & value))});
+            } else if (value <= 0x10FFFF) {
+              result.insert(result.end(),
+                            {static_cast<char>(0xF0 | (0x07 & (value >> 18))),
+                             static_cast<char>(0x80 | (0x3F & (value >> 12))),
+                             static_cast<char>(0x80 | (0x3F & (value >> 6))),
+                             static_cast<char>(0x80 | (0x3F & value))});
+            } else {
+              return std::nullopt;
+            }
+          }
+          break;
+        default:
+          return std::nullopt;
+      }
+    }
+  }
+  return {{&result[0], result.size()}};
+}
 
 class Value {
 public:
@@ -95,8 +201,16 @@ public:
     return {number};
   }
 
+  /// Try to retrieve the value as a string value type.
+  std::optional<std::string> asString() const noexcept {
+    if (!isString()) {
+      return std::nullopt;
+    }
+    return toString({&beg_[1], static_cast<std::string_view::size_type>(&end_[-1] - &beg_[1])});
+  }
+
   /// Try to retrieve the value as a string view value type.
-  std::optional<std::string_view> asString() const noexcept {
+  std::optional<std::string_view> asStringView() const noexcept {
     if (!isString()) {
       return std::nullopt;
     }
@@ -132,7 +246,11 @@ private:
 
 class Member {
 public:
-  std::string_view name() const noexcept {
+  std::optional<std::string> asString() const noexcept {
+    return toString(asStringView());
+  }
+
+  std::string_view asStringView() const noexcept {
     return {&beg_[1], static_cast<std::string_view::size_type>(&end_[-1] - &beg_[1])};
   }
 
@@ -333,22 +451,35 @@ private:
 
   static constexpr std::optional<Value> parseString(const char* cur, const char* end) noexcept {
     assert(*cur == '"');
-    const char* beg = cur++;
-    while (cur < end) {
-      if (*cur == '\\') {
-        if (++cur >= end) break;
-        if (*cur == 'u') {
-          if (++cur >= end || !isHexadecimal(*cur)) break;
-          if (++cur >= end || !isHexadecimal(*cur)) break;
-          if (++cur >= end || !isHexadecimal(*cur)) break;
-          if (++cur >= end || !isHexadecimal(*cur)) break;
-        } else if (*cur != '"' && *cur != '\\' && *cur != '/' && *cur != 'b' && *cur != 'f' && *cur != 'n' && *cur != 'r' && *cur != 't') {
+    const char* beg = cur;
+    while (++cur < end) {
+      if ((*cur & 0x80) == 0) {
+        if (*cur == '\\') {
+          if (++cur >= end) break;
+          if (*cur == 'u') {
+            if (++cur >= end || !isHexadecimal(*cur)) break;
+            if (++cur >= end || !isHexadecimal(*cur)) break;
+            if (++cur >= end || !isHexadecimal(*cur)) break;
+            if (++cur >= end || !isHexadecimal(*cur)) break;
+          } else if (*cur != '"' && *cur != '\\' && *cur != '/' && *cur != 'b' && *cur != 'f' && *cur != 'n' && *cur != 'r' && *cur != 't') {
+            break;
+          }
+        } else if (*cur == '"') {
+          return {{Value::Type::String, beg, ++cur}};
+        } else if (*cur >= 0 && *cur < 32) {
           break;
         }
-        if (++cur >= end) break;
-      }
-      if (*cur++ == '"') {
-        return {{Value::Type::String, beg, cur}};
+      } else if ((*cur & 0xE0) == 0xC0) {
+        if (++cur >= end || (*cur & 0xC0) != 0x80) break;
+      } else if ((*cur & 0xF0) == 0xE0) {
+        if (++cur >= end || (*cur & 0xC0) != 0x80) break;
+        if (++cur >= end || (*cur & 0xC0) != 0x80) break;
+      } else if ((*cur & 0xF8) == 0xF0) {
+        if (++cur >= end || (*cur & 0xC0) != 0x80) break;
+        if (++cur >= end || (*cur & 0xC0) != 0x80) break;
+        if (++cur >= end || (*cur & 0xC0) != 0x80) break;
+      } else {
+        break;
       }
     }
     return std::nullopt;

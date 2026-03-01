@@ -14,7 +14,7 @@ Since values are represented as string-views into the original text, they are on
 
 ## String Values
 
-String values are represented as string-views into the original text (excluding the surrounding quotes), and they are not unescaped. This means that if a string value contains escape sequences (e.g., `\n`, `\t`, `\"`), they will be returned as-is in the string-view, the same applies to unicode escape sequences (e.g., `\uXXXX`). Methods to unescape string values on demand will be added in the future.
+When using `asStringView()`, values are returned as an `std::string_view` into the original text (excluding the surrounding quotes), and they are not unescaped. This means that if a string value contains escape sequences (e.g., `\n`, `\t`, `\"`), they will be returned as-is in the string-view, the same applies to unicode escape sequences (e.g., `\uXXXX`). If you need to access the unescaped string value, you can use the `asString()` method, which will return a `std::string` with all escape sequences processed, if any errors are found, the method will return an empty `std::optional` / `std::nullopt`. Keep in mind that using `asString()` does in fact involve allocating memory on the heap both for temorary data and for the resulting string.
 
 ## Example Usage
 
