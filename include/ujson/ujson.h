@@ -26,6 +26,7 @@ static std::optional<std::string> toString(std::string_view stringView) noexcept
   const char* end = &cur[stringView.length()];
   while (cur < end) {
     if (*cur != '\\') {
+#ifndef UJSON_DISABLE_UNICODE
       if ((*cur & 0x80) == 0) {
         result.push_back(*cur++);
       } else if ((*cur & 0xE0) == 0xC0) {
@@ -37,6 +38,9 @@ static std::optional<std::string> toString(std::string_view stringView) noexcept
       } else {
         return std::nullopt;
       }
+#else
+      result.push_back(*cur++);
+#endif
     } else {
       if (++cur >= end) return std::nullopt;
       switch (*cur++) {
@@ -65,7 +69,7 @@ static std::optional<std::string> toString(std::string_view stringView) noexcept
           result.push_back('\t');
           break;
         case 'u': {
-            auto toCodePoint = [](const char* beg, const char* end) noexcept -> std::uint16_t {
+            auto toCodePoint = []<std::uint16_t Sub>(const char* beg, const char* end) noexcept -> std::uint16_t {
               assert(end - beg == 4);
               std::uint16_t result = 0;
               for (const char* cur = beg; cur < end; ++cur) {
@@ -77,16 +81,17 @@ static std::optional<std::string> toString(std::string_view stringView) noexcept
                 } else if (*cur >= 'A' && *cur <= 'F') {
                   result |= (*cur - 'A' + 10);
                 } else {
-                  return 0xFFFD;
+                  return Sub;
                 }
               }
               return result;
             };
+#ifndef UJSON_DISABLE_UNICODE
             if (cur + 4 > end) return std::nullopt;
-            std::uint32_t value = toCodePoint(&cur[0], &cur[4]);
+            std::uint32_t value = toCodePoint.template operator()<0xFFFD>(&cur[0], &cur[4]);
             if (value >= 0xD800 && value <= 0xDBFF) {
               if (cur + 10 > end || cur[4] != '\\' || cur[5] != 'u') return std::nullopt;
-              std::uint16_t lowSurrogate = toCodePoint(&cur[6], &cur[10]);
+              std::uint16_t lowSurrogate = toCodePoint.template operator()<0xFFFD>(&cur[6], &cur[10]);
               if (lowSurrogate < 0xDC00 || lowSurrogate > 0xDFFF) return std::nullopt;
               value = 0x10000 + ((value & 0x3FF) << 10) + (lowSurrogate & 0x3FF);
               cur += 10;
@@ -113,6 +118,13 @@ static std::optional<std::string> toString(std::string_view stringView) noexcept
             } else {
               return std::nullopt;
             }
+#else
+            if (cur + 4 > end) return std::nullopt;
+            std::uint16_t value = toCodePoint.template operator()<0x001A>(&cur[0], &cur[4]);
+            if (value > 0x7F) return std::nullopt;
+            result.push_back(static_cast<char>(value));
+            cur += 4;
+#endif
           }
           break;
         default:
@@ -453,7 +465,9 @@ private:
     assert(*cur == '"');
     const char* beg = cur;
     while (++cur < end) {
+#ifndef UJSON_DISABLE_UNICODE
       if ((*cur & 0x80) == 0) {
+#endif
         if (*cur == '\\') {
           if (++cur >= end) break;
           if (*cur == 'u') {
@@ -469,6 +483,7 @@ private:
         } else if (*cur >= 0 && *cur < 32) {
           break;
         }
+#ifndef UJSON_DISABLE_UNICODE
       } else if ((*cur & 0xE0) == 0xC0) {
         if (++cur >= end || (*cur & 0xC0) != 0x80) break;
       } else if ((*cur & 0xF0) == 0xE0) {
@@ -481,6 +496,7 @@ private:
       } else {
         break;
       }
+#endif
     }
     return std::nullopt;
   }
