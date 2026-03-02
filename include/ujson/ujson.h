@@ -18,10 +18,15 @@
 #include <type_traits>
 #include <vector>
 
+#ifndef UJSON_NAMESPACE
 namespace ujson {
+#else
+namespace UJSON_NAMESPACE {
+#endif
 
 static std::optional<std::string> toString(std::string_view stringView) noexcept {
-  std::vector<char> result(stringView.length());
+  std::vector<char> result;
+  result.reserve(stringView.length());
   const char* cur = stringView.data();
   const char* end = &cur[stringView.length()];
   while (cur < end) {
@@ -96,6 +101,7 @@ static std::optional<std::string> toString(std::string_view stringView) noexcept
               value = 0x10000 + ((value & 0x3FF) << 10) + (lowSurrogate & 0x3FF);
               cur += 10;
             } else {
+              if (value >= 0xDC00 && value <= 0xDFFF) return std::nullopt;
               cur += 4;
             }
             if (value <= 0x7F) {
@@ -194,20 +200,18 @@ public:
   }
 
   /// Try to retrieve the value as a boolean value type.
-  std::optional<bool> asBool() const noexcept {
-    if (!isBool()) {
-      return std::nullopt;
-    }
-    return {type_ == Type::True};
+  bool asBool() const noexcept {
+    assert(isBool());
+    return type_ == Type::True;
   }
 
   /// Try to retrieve the value as a number value type.
   template <typename Type>
-  requires (std::is_arithmetic_v<Type> && sizeof(T) <= 4)
+    requires(std::is_arithmetic_v<Type> && sizeof(Type) <= 4)
   std::optional<Type> asNumber() const noexcept {
     assert(isNumber());
     Type number;
-    if (!isNumber() || std::from_chars(beg_, end_, number).ec != std::errc()) {
+    if (std::from_chars(beg_, end_, number).ec != std::errc()) {
       return std::nullopt;
     }
     return {number};
@@ -215,18 +219,14 @@ public:
 
   /// Try to retrieve the value as a string value type.
   std::optional<std::string> asString() const noexcept {
-    if (!isString()) {
-      return std::nullopt;
-    }
+    assert(isString());
     return toString({&beg_[1], static_cast<std::string_view::size_type>(&end_[-1] - &beg_[1])});
   }
 
   /// Try to retrieve the value as a string view value type.
-  std::optional<std::string_view> asStringView() const noexcept {
-    if (!isString()) {
-      return std::nullopt;
-    }
-    return {{&beg_[1], static_cast<std::string_view::size_type>(&end_[-1] - &beg_[1])}};
+  std::string_view asStringView() const noexcept {
+    assert(isString());
+    return {&beg_[1], static_cast<std::string_view::size_type>(&end_[-1] - &beg_[1])};
   }
 
 private:
@@ -445,7 +445,7 @@ private:
   }
 
   template <Value::Type::Enum Type, char Beg, char End>
-  requires (Type == Value::Type::Array || Type == Value::Type::Object)
+    requires(Type == Value::Type::Array || Type == Value::Type::Object)
   static constexpr std::optional<Value> parseScope(const char* cur, const char* end) noexcept {
     assert(*cur == Beg);
     const char* beg = cur++;
@@ -502,7 +502,7 @@ private:
   }
 
   template <Value::Type::Enum Type, std::size_t N>
-  requires (N > 0 && (Type == Value::Type::Null || Type == Value::Type::True || Type == Value::Type::False))
+    requires(N > 0 && (Type == Value::Type::Null || Type == Value::Type::True || Type == Value::Type::False))
   static constexpr std::optional<Value> parseChars(const char (&str)[N], const char* cur, const char* end) noexcept {
     assert(*cur == str[0]);
     if (static_cast<decltype(N)>(end - cur) < N) return std::nullopt;
@@ -541,7 +541,7 @@ private:
   }
 
   template <Value::Type::Enum Type = Value::Type::Unsigned>
-  requires (Type == Value::Type::Unsigned || Type == Value::Type::Signed)
+    requires(Type == Value::Type::Unsigned || Type == Value::Type::Signed)
   static constexpr std::optional<Value> parseUnsigned0(const char* beg, const char* cur, const char* end) noexcept {
     assert(*cur == '0');
     if (++cur >= end) return {{Type, beg, cur}};     
@@ -552,7 +552,7 @@ private:
   }
 
   template <Value::Type::Enum Type = Value::Type::Unsigned>
-  requires (Type == Value::Type::Unsigned || Type == Value::Type::Signed)
+    requires(Type == Value::Type::Unsigned || Type == Value::Type::Signed)
   static constexpr std::optional<Value> parseUnsigned1to9(const char* beg, const char* cur, const char* end) noexcept {
     assert(isDigit1to9(*cur));
     do {
