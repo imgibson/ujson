@@ -203,8 +203,8 @@ public:
 
   /// Try to retrieve the value as a number value type.
   template <typename Type>
-  std::optional<Type> asNumber() const noexcept
-    requires (std::is_arithmetic_v<Type> && sizeof(T) <= 4) {
+  requires (std::is_arithmetic_v<Type> && sizeof(T) <= 4)
+  std::optional<Type> asNumber() const noexcept {
     assert(isNumber());
     Type number;
     if (!isNumber() || std::from_chars(beg_, end_, number).ec != std::errc()) {
@@ -445,8 +445,8 @@ private:
   }
 
   template <Value::Type::Enum Type, char Beg, char End>
-  static constexpr std::optional<Value> parseScope(const char* cur, const char* end) noexcept
-    requires (Type == Value::Type::Array || Type == Value::Type::Object) {
+  requires (Type == Value::Type::Array || Type == Value::Type::Object)
+  static constexpr std::optional<Value> parseScope(const char* cur, const char* end) noexcept {
     assert(*cur == Beg);
     const char* beg = cur++;
     int depth = 1;
@@ -502,8 +502,8 @@ private:
   }
 
   template <Value::Type::Enum Type, std::size_t N>
-  static constexpr std::optional<Value> parseChars(const char (&str)[N], const char* cur, const char* end) noexcept
-    requires (N > 0 && (Type == Value::Type::Null || Type == Value::Type::True || Type == Value::Type::False)) {
+  requires (N > 0 && (Type == Value::Type::Null || Type == Value::Type::True || Type == Value::Type::False))
+  static constexpr std::optional<Value> parseChars(const char (&str)[N], const char* cur, const char* end) noexcept {
     assert(*cur == str[0]);
     if (static_cast<decltype(N)>(end - cur) < N) return std::nullopt;
     for (decltype(N) i = 1; i < N; ++i) {
@@ -541,8 +541,8 @@ private:
   }
 
   template <Value::Type::Enum Type = Value::Type::Unsigned>
-  static constexpr std::optional<Value> parseUnsigned0(const char* beg, const char* cur, const char* end) noexcept
-    requires (Type == Value::Type::Unsigned || Type == Value::Type::Signed) {
+  requires (Type == Value::Type::Unsigned || Type == Value::Type::Signed)
+  static constexpr std::optional<Value> parseUnsigned0(const char* beg, const char* cur, const char* end) noexcept {
     assert(*cur == '0');
     if (++cur >= end) return {{Type, beg, cur}};     
     if (*cur == '.') {
@@ -552,8 +552,8 @@ private:
   }
 
   template <Value::Type::Enum Type = Value::Type::Unsigned>
-  static constexpr std::optional<Value> parseUnsigned1to9(const char* beg, const char* cur, const char* end) noexcept
-    requires (Type == Value::Type::Unsigned || Type == Value::Type::Signed) {
+  requires (Type == Value::Type::Unsigned || Type == Value::Type::Signed)
+  static constexpr std::optional<Value> parseUnsigned1to9(const char* beg, const char* cur, const char* end) noexcept {
     assert(isDigit1to9(*cur));
     do {
       if (++cur >= end) break;
