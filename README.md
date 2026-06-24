@@ -32,7 +32,7 @@ std::vector<char> text(size);
 if (!file.read(&text[0], size)) return;
 
 // Prepare a Json reader
-std::optional<ujson::Reader> reader = ujson::Reader::create(text, size);
+std::optional<ujson::Reader> reader = ujson::Reader::create(&text[0], size);
 if (!reader) return;
 
 // Parse the document
