@@ -1,10 +1,26 @@
-/**
- * 
- * @author Anders Lind (96395432+imgibson@users.noreply.github.com)
- * @date 2026-02-14
- * 
- * Copyright (c) 2026 Anders Lind (https://github.com/imgibson). All rights reserved.
- * 
+/*!
+ * µJson - Lightweight filesystem utilities for C++
+ *
+ * Copyright (c) 2026 Anders Lind (https://github.com/imgibson).
+ * All rights reserved.
+ *
+ * Required Notice: Copyright (c) 2026 Anders Lind (https://truehumandesign.se).
+ *
+ * This software is available under dual licensing:
+ *
+ * 1. Noncommercial License:
+ *    PolyForm Noncommercial License 1.0.0.
+ *    Free for all uses permitted by that license, including
+ *    modification and redistribution under its terms.
+ *
+ * 2. Commercial License:
+ *    Commercial use is available under a separate license
+ *    granted by the copyright holder.
+ *    Contact: https://truehumandesign.se/
+ *
+ * License: https://polyformproject.org/licenses/noncommercial/1.0.0
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
  */
 
 #pragma once
